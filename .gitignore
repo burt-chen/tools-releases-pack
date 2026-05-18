@@ -1,0 +1,19 @@
+# 本機資料 / 機密 —— 絕不進版控
+#  my_tools.json 可能含解鎖密碼明碼;各人本機自己累積,不該共用
+my_tools.json
+
+# 打包產出（每個工具一個輸出夾,內含這些）
+*.zip
+tool_info.json
+release_info.txt
+
+# 本工具原始碼只有 .py,沒有任何 .json 來源檔。
+# 一律忽略 .json 以防誤把資料/機密(my_tools / tool_info / 匯入檔)提交進來。
+*.json
+
+# Python / 編輯器暫存
+__pycache__/
+*.pyc
+*.pyo
+.idea/
+.vscode/
