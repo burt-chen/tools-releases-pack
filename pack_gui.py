@@ -139,13 +139,14 @@ class ToolDialog(tk.Toplevel):
 # ── 主視窗 ──────────────────────────────────────────────────
 
 class PackApp:
-    def __init__(self, root: tk.Tk):
-        self.root = root
-        root.title("小工具打包")
-        root.geometry("760x620")
-        root.minsize(680, 560)
+    def __init__(self, parent: tk.Widget):
+        # parent 可以是 tk.Tk（獨立執行）或 launcher 給的 Frame（嵌入執行）。
+        # 一律把 UI 建進自己的 self.frame，window 標題/大小由 main() 設。
+        self.parent = parent
+        self.root = parent          # 給 Toplevel / messagebox 當 parent 用
+        self.frame = ttk.Frame(parent)
 
-        nb = ttk.Notebook(root)
+        nb = ttk.Notebook(self.frame)
         nb.pack(fill="both", expand=True, padx=8, pady=8)
         self.tab_data = ttk.Frame(nb)
         self.tab_pack = ttk.Frame(nb)
@@ -487,9 +488,18 @@ class PackApp:
             messagebox.showerror("無法開啟", str(e))
 
 
+def create_frame(parent: tk.Widget) -> ttk.Frame:
+    """供 MyTools Launcher 嵌入用：回傳建好 UI 的 Frame。"""
+    return PackApp(parent).frame
+
+
 def main():
     root = tk.Tk()
-    PackApp(root)
+    root.title("小工具打包")
+    root.geometry("760x620")
+    root.minsize(680, 560)
+    app = PackApp(root)
+    app.frame.pack(fill="both", expand=True)
     root.mainloop()
 
 
