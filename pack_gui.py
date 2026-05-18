@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -190,6 +191,8 @@ class PackApp:
                    command=self._import_data).pack(side="left", padx=6)
         ttk.Button(bar, text="匯入 tool_info",
                    command=self._import_info).pack(side="right")
+        ttk.Button(bar, text="檢視/編輯 tool_info",
+                   command=self._edit_tool_info).pack(side="right", padx=6)
 
     def _selected_id(self) -> str | None:
         sel = self.tree.selection()
@@ -257,6 +260,63 @@ class PackApp:
             f"已覆蓋「{tid}」的 tool_info.json,版本歷史以此檔為準。\n\n"
             f"版本:{vlist}\n\n"
             "之後打包會接續這份歷史往上加新版本。")
+
+    def _edit_tool_info(self):
+        tid = self._selected_id()
+        if not tid:
+            messagebox.showinfo("請先選取",
+                                "請先選一個工具,再檢視/編輯它的 tool_info.json。")
+            return
+        p = pack.tool_info_path(tid)
+        if not p.exists():
+            messagebox.showinfo(
+                "尚未產生",
+                f"「{tid}」還沒有 tool_info.json。\n"
+                "請先到「打包」頁打包,或用「匯入 tool_info」匯入。")
+            return
+
+        win = tk.Toplevel(self.root)
+        win.title(f"tool_info.json — {tid}")
+        win.geometry("640x560")
+        win.transient(self.root)
+        ttk.Label(win, text=str(p), foreground="#888").pack(
+            anchor="w", padx=10, pady=(8, 0))
+        txt = tk.Text(win, wrap="none", font=("Consolas", 10), undo=True)
+        txt.pack(fill="both", expand=True, padx=10, pady=8)
+        txt.insert("1.0", p.read_text(encoding="utf-8"))
+
+        def save():
+            try:
+                data = json.loads(txt.get("1.0", "end"))
+            except Exception as e:
+                messagebox.showerror("JSON 格式錯誤",
+                                     f"未儲存。\n\n{e}", parent=win)
+                return
+            p.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8")
+            # 版本歷史同步回本機清單(與「匯入 tool_info」一致)
+            cur = next((t for t in self._reg["tools"]
+                        if t.get("id") == tid), {})
+            if cur:
+                vers = [{"version": v.get("version"),
+                         "size_bytes": v.get("size_bytes", 0)}
+                        for v in data.get("versions", [])]
+                pack.upsert_registry({
+                    **cur, "versions": vers,
+                    "last_version": data.get("version",
+                                             cur.get("last_version", "")),
+                })
+                self._reload(select_id=tid)
+            messagebox.showinfo("已儲存",
+                                "tool_info.json 已更新。", parent=win)
+            win.destroy()
+
+        bar = ttk.Frame(win)
+        bar.pack(fill="x", padx=10, pady=(0, 10))
+        ttk.Button(bar, text="取消", command=win.destroy).pack(side="right")
+        ttk.Button(bar, text="儲存", command=save).pack(side="right", padx=6)
+        win.grab_set()
 
     def _export_data(self):
         dest = filedialog.asksaveasfilename(
