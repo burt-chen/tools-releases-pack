@@ -184,13 +184,12 @@ class PackApp:
         ttk.Button(bar, text="新增", command=self._add_tool).pack(side="left")
         ttk.Button(bar, text="編輯", command=self._edit_tool).pack(side="left", padx=6)
         ttk.Button(bar, text="刪除", command=self._del_tool).pack(side="left")
-        ttk.Button(bar, text="匯入 tool_info",
-                   command=self._import_info).pack(side="left", padx=(16, 0))
-        ttk.Button(bar, text="匯出小工具資料",
+        ttk.Button(bar, text="匯出資料",
                    command=self._export_data).pack(side="left", padx=(16, 0))
-        ttk.Button(bar, text="匯入小工具資料",
+        ttk.Button(bar, text="匯入資料",
                    command=self._import_data).pack(side="left", padx=6)
-        ttk.Label(bar, text="（雙擊一列可編輯）", foreground="#888").pack(side="right")
+        ttk.Button(bar, text="匯入 tool_info",
+                   command=self._import_info).pack(side="right")
 
     def _selected_id(self) -> str | None:
         sel = self.tree.selection()
