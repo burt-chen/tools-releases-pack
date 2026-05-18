@@ -1,0 +1,4 @@
+# tools-releases-pack 打包它自己時的額外排除。
+# 本工具執行只需 .py + README,沒有任何 .json 來源檔;
+# 排掉所有 .json 以免把 my_tools.json / 匯入檔 / 暫存 json 掃進 zip。
+*.json

@@ -36,8 +36,10 @@ EXCLUDE_GLOBS = [
     "*.spec", "*.zip", "*.pyc", "*.pyo", "*.log",
     "build_log.txt", ".DS_Store", "Thumbs.db",
     ".git*", "build.bat",  # git / 編 exe 用,launcher 用不到
-    "pack.py", "pack_gui.py", "pack.json", ".packignore",  # 打包工具本身不進 zip
-    "my_tools.json", "tool_info.json",  # 打包工具的本機資料,不進 zip
+    "pack.json", ".packignore",  # 打包設定,launcher 不需要
+    "my_tools.json", "tool_info.json", "release_info.txt",  # 打包工具的輸出/本機資料
+    # 註:不排除 pack.py / pack_gui.py —— 打包工具本身要靠它們執行;
+    # 一般工具資料夾不會有這兩檔,所以排不排除對它們沒差。
 ]
 
 # tool_info.json 的下載網址範本（同事用自己 GitHub 帳號也適用）
@@ -265,7 +267,29 @@ def load_extra_ignores(folder: Path) -> list[str]:
     ]
 
 
-def _skip(rel: Path, extra: list[str]) -> bool:
+def _gen_dirs(folder: Path) -> set[str]:
+    """偵測「打包輸出夾」：folder 第一層中,內含 release_info.txt /
+    tool_info.json / *.zip 的子資料夾,視為產出物,整夾排除。
+
+    這讓打包工具打包自己時，不會把別的工具輸出夾掃進去。
+    """
+    out: set[str] = set()
+    try:
+        for p in folder.iterdir():
+            if p.is_dir() and (
+                (p / "release_info.txt").exists()
+                or (p / "tool_info.json").exists()
+                or any(p.glob("*.zip"))
+            ):
+                out.add(p.name)
+    except OSError:
+        pass
+    return out
+
+
+def _skip(rel: Path, extra: list[str], gen: set[str]) -> bool:
+    if rel.parts and rel.parts[0] in gen:
+        return True
     if any(part in EXCLUDE_DIRS for part in rel.parts):
         return True
     return any(fnmatch.fnmatch(rel.name, g) for g in EXCLUDE_GLOBS + extra)
@@ -274,13 +298,14 @@ def _skip(rel: Path, extra: list[str]) -> bool:
 def preview(folder: Path) -> dict:
     """不打包，只回傳將被納入的檔案與疑似機密清單，給 GUI 預覽用。"""
     extra = load_extra_ignores(folder)
+    gen = _gen_dirs(folder)
     included: list[str] = []
     sensitive: list[str] = []
     for path in sorted(folder.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(folder)
-        if _skip(rel, extra):
+        if _skip(rel, extra, gen):
             continue
         included.append(rel.as_posix())
         if any(fnmatch.fnmatch(rel.name.lower(), h) for h in SENSITIVE_HINTS):
@@ -306,6 +331,7 @@ def build_package(folder: Path, tool_id: str, version: str) -> dict:
         raise ValueError("id 與 version 不可為空")
 
     extra = load_extra_ignores(folder)
+    gen = _gen_dirs(folder)
     out_dir = OUTPUT_ROOT / tool_id
     out_dir.mkdir(parents=True, exist_ok=True)
     zip_path = out_dir / f"{tool_id}-v{version}.zip"
@@ -318,7 +344,7 @@ def build_package(folder: Path, tool_id: str, version: str) -> dict:
             if not path.is_file():
                 continue
             rel = path.relative_to(folder)
-            if _skip(rel, extra):
+            if _skip(rel, extra, gen):
                 continue
             zf.write(path, rel.as_posix())  # 扁平結構：main_frame.py 在 zip 根
             included.append(rel.as_posix())
