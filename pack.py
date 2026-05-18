@@ -203,6 +203,48 @@ def delete_registry(tool_id: str) -> bool:
     return len(kept) != len(tools)
 
 
+def export_registry(dest: Path) -> int:
+    """把整份本機工具清單匯出到指定檔，回傳工具筆數。"""
+    data = load_registry()
+    Path(dest).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return len(data.get("tools", []))
+
+
+def import_registry(src: Path, replace: bool = False) -> dict:
+    """從檔匯入工具清單。
+
+    replace=True 整份覆蓋；False 以 id 為鍵合併（同 id 覆蓋、新 id 追加，
+    既有但來源沒有的保留）。回傳 {"added","updated","total"}。
+    """
+    incoming = json.loads(Path(src).read_text(encoding="utf-8"))
+    if not isinstance(incoming, dict) or not isinstance(incoming.get("tools"), list):
+        raise ValueError("檔案格式不對：應為 {\"tools\": [...]} 的小工具資料")
+
+    if replace:
+        save_registry({"tools": incoming["tools"]})
+        return {"added": len(incoming["tools"]), "updated": 0,
+                "total": len(incoming["tools"])}
+
+    data = load_registry()
+    tools = data.setdefault("tools", [])
+    by_id = {t.get("id"): i for i, t in enumerate(tools)}
+    added = updated = 0
+    for entry in incoming["tools"]:
+        tid = entry.get("id")
+        if not tid:
+            continue
+        if tid in by_id:
+            tools[by_id[tid]] = {**tools[by_id[tid]], **entry}
+            updated += 1
+        else:
+            tools.append(entry)
+            by_id[tid] = len(tools) - 1
+            added += 1
+    save_registry(data)
+    return {"added": added, "updated": updated, "total": len(tools)}
+
+
 def tool_info_path(tool_id: str) -> Path:
     return OUTPUT_ROOT / tool_id / "tool_info.json"
 

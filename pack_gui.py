@@ -186,6 +186,10 @@ class PackApp:
         ttk.Button(bar, text="刪除", command=self._del_tool).pack(side="left")
         ttk.Button(bar, text="匯入 tool_info",
                    command=self._import_info).pack(side="left", padx=(16, 0))
+        ttk.Button(bar, text="匯出小工具資料",
+                   command=self._export_data).pack(side="left", padx=(16, 0))
+        ttk.Button(bar, text="匯入小工具資料",
+                   command=self._import_data).pack(side="left", padx=6)
         ttk.Label(bar, text="（雙擊一列可編輯）", foreground="#888").pack(side="right")
 
     def _selected_id(self) -> str | None:
@@ -254,6 +258,46 @@ class PackApp:
             f"已覆蓋「{tid}」的 tool_info.json,版本歷史以此檔為準。\n\n"
             f"版本:{vlist}\n\n"
             "之後打包會接續這份歷史往上加新版本。")
+
+    def _export_data(self):
+        dest = filedialog.asksaveasfilename(
+            title="匯出小工具資料", defaultextension=".json",
+            initialfile="my_tools_backup.json",
+            filetypes=[("JSON", "*.json")])
+        if not dest:
+            return
+        try:
+            n = pack.export_registry(Path(dest))
+        except Exception as e:
+            messagebox.showerror("匯出失敗", str(e))
+            return
+        messagebox.showwarning(
+            "匯出完成",
+            f"已匯出 {n} 個工具到:\n{dest}\n\n"
+            "⚠ 此檔含工具設定,隱藏工具的解鎖密碼為明碼,"
+            "請妥善保管、勿外流。")
+
+    def _import_data(self):
+        src = filedialog.askopenfilename(
+            title="匯入小工具資料",
+            filetypes=[("JSON", "*.json"), ("所有檔案", "*.*")])
+        if not src:
+            return
+        replace = messagebox.askyesno(
+            "匯入方式",
+            "要「整份覆蓋」目前的小工具資料嗎?\n\n"
+            "是 = 整份取代(現有清單會被清掉換成檔案內容)\n"
+            "否 = 合併(同 id 覆蓋、新 id 新增,其餘保留)")
+        try:
+            r = pack.import_registry(Path(src), replace=replace)
+        except Exception as e:
+            messagebox.showerror("匯入失敗", str(e))
+            return
+        self._reload()
+        messagebox.showinfo(
+            "匯入完成",
+            f"新增 {r['added']} 筆、更新 {r['updated']} 筆,"
+            f"目前共 {r['total']} 筆。")
 
     # ---- 頁簽 2：打包 ----
 
