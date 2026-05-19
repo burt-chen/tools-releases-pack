@@ -21,7 +21,10 @@ import fnmatch
 import hashlib
 import json
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 # 所有 zip 統一輸出到「本腳本所在資料夾」底下，再依專案名稱分子資料夾。
@@ -123,7 +126,59 @@ def merge_versions(history: list | None, version: str, size_bytes: int) -> list:
     return out
 
 
-def make_tool_info(meta: dict, version: str, size_bytes: int, sha256: str) -> dict:
+def _find_python() -> str | None:
+    """找一個可用、且有 pip 的 Python 直譯器。"""
+    cands = [sys.executable, "py", "python", "python3"]
+    for c in cands:
+        if not c:
+            continue
+        try:
+            r = subprocess.run([c, "-m", "pip", "--version"],
+                               capture_output=True, timeout=15)
+            if r.returncode == 0:
+                return c
+        except Exception:
+            pass
+    return None
+
+
+def measure_installed_size(folder: Path, zip_bytes: int,
+                           progress=None) -> int | None:
+    """估算「安裝後大小」:把 requirements.txt 裝到暫存夾,加上來源大小。
+
+    無 requirements.txt → 約等於來源(回 zip_bytes)。
+    pip 失敗 / 無 Python / 無網路 → 回 None(呼叫端自行決定不寫此欄)。
+    progress: 可選的 callable(str),回報進度文字。
+    """
+    folder = Path(folder)
+    req = folder / "requirements.txt"
+    if not req.exists() or not req.read_text(encoding="utf-8").strip():
+        return zip_bytes
+    py = _find_python()
+    if py is None:
+        return None
+    tmp = Path(tempfile.mkdtemp(prefix="pack_size_"))
+    try:
+        if progress:
+            progress("正在 pip 安裝相依以量測安裝後大小(需網路,稍候)…")
+        r = subprocess.run(
+            [py, "-m", "pip", "install", "-r", str(req),
+             "--target", str(tmp), "--quiet", "--no-input",
+             "--disable-pip-version-check"],
+            capture_output=True, text=True, timeout=900,
+        )
+        if r.returncode != 0:
+            return None
+        deps = sum(p.stat().st_size for p in tmp.rglob("*") if p.is_file())
+        return deps + zip_bytes
+    except Exception:
+        return None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def make_tool_info(meta: dict, version: str, size_bytes: int, sha256: str,
+                   installed_size_bytes: int | None = None) -> dict:
     """依表單 meta + 打包結果，組出 tools.json 用的完整工具物件。
 
     meta 可含 open(bool,預設 True)、unlock_password、versions(歷史清單)。
@@ -153,6 +208,8 @@ def make_tool_info(meta: dict, version: str, size_bytes: int, sha256: str) -> di
         "homepage": homepage,
         "versions": versions,
     }
+    if installed_size_bytes:
+        info["installed_size_bytes"] = int(installed_size_bytes)
     if not meta.get("open", True):
         info["hidden"] = True
         pw = (meta.get("unlock_password") or "").strip()

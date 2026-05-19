@@ -546,7 +546,14 @@ class PackApp:
                 base_versions, ver, r["size_bytes"])
             meta2 = {**t, "folder": folder, "last_version": ver,
                      "versions": new_versions}
-            info = pack.make_tool_info(meta2, ver, r["size_bytes"], r["sha256"])
+            # 量測安裝後大小(pip 裝相依到暫存夾;慢、需網路,失敗則略過)
+            self._set_text([("正在 pip 安裝相依以量測安裝後大小,"
+                             "需網路、可能要一兩分鐘…", "muted")])
+            self.root.update()
+            isz = pack.measure_installed_size(Path(folder), r["size_bytes"])
+            info = pack.make_tool_info(
+                meta2, ver, r["size_bytes"], r["sha256"],
+                installed_size_bytes=isz)
             info_path = pack.write_tool_info(r["zip_path"].parent, info)
         except Exception as e:
             messagebox.showerror("打包失敗", str(e))
@@ -562,7 +569,9 @@ class PackApp:
             (f"   zip:        {r['zip_path']}", "muted"),
             (f"   tool_info:  {info_path}", "muted"),
             ("", "muted"),
-            (f"size_bytes:  {r['size_bytes']}", ""),
+            (f"size_bytes:  {r['size_bytes']}(下載 zip)", ""),
+            (f"安裝後大小:  {info.get('installed_size_bytes', '(未量測)')}"
+             + (" bytes" if info.get('installed_size_bytes') else ""), ""),
             (f"sha256:      {r['sha256']}", ""),
             (f"url:         {info['url']}", ""),
             (f"版本歷史:    {', '.join(v['version'] for v in info['versions'])}"
