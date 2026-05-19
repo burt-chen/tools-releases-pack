@@ -127,14 +127,26 @@ def merge_versions(history: list | None, version: str, size_bytes: int) -> list:
 
 
 def _find_python() -> str | None:
-    """找一個可用、且有 pip 的 Python 直譯器。"""
-    cands = [sys.executable, "py", "python", "python3"]
+    """找一個可用、且有 pip 的 Python 直譯器。
+
+    注意:被打包成 exe(PyInstaller,如在「整合工具」內執行)時,
+    sys.executable 是該 exe 本身,不是 Python——絕不能拿它去 -m pip,
+    否則會再開一個 launcher 視窗。凍結時跳過 sys.executable。
+    """
+    cands: list[str] = []
+    if not getattr(sys, "frozen", False):
+        cands.append(sys.executable)
+    cands += ["py", "python", "python3"]
+    no_win = 0
+    if sys.platform == "win32":
+        no_win = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     for c in cands:
         if not c:
             continue
         try:
             r = subprocess.run([c, "-m", "pip", "--version"],
-                               capture_output=True, timeout=15)
+                               capture_output=True, timeout=15,
+                               creationflags=no_win)
             if r.returncode == 0:
                 return c
         except Exception:
@@ -161,11 +173,14 @@ def measure_installed_size(folder: Path, zip_bytes: int,
     try:
         if progress:
             progress("正在 pip 安裝相依以量測安裝後大小(需網路,稍候)…")
+        no_win = (getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                  if sys.platform == "win32" else 0)
         r = subprocess.run(
             [py, "-m", "pip", "install", "-r", str(req),
              "--target", str(tmp), "--quiet", "--no-input",
              "--disable-pip-version-check"],
             capture_output=True, text=True, timeout=900,
+            creationflags=no_win,
         )
         if r.returncode != 0:
             return None
